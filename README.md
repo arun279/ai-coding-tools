@@ -2,11 +2,15 @@
 
 A collection of configurations, prompts, and tools that I use to enhance my AI-assisted development workflow.
 
-## Claude Code Configuration
+## Claude Code Configurations
 
-Custom settings and status line for [Claude Code](https://claude.com/claude-code) that provide real-time context awareness and project visibility.
+Custom configurations for [Claude Code](https://claude.com/claude-code).
 
-### Features
+### Status Line
+
+Custom status line that provides real-time context awareness and project visibility.
+
+#### Features
 
 The custom status line provides at-a-glance information about your development session:
 
@@ -24,7 +28,7 @@ The status line uses color coding to communicate state:
 - **Yellow** context indicator = approaching auto-compact (90-94%)
 - **Red** context indicator = auto-compact imminent (≥95%)
 
-### Installation
+#### Installation
 
 1. **Copy settings configuration:**
    ```bash
@@ -40,7 +44,7 @@ The status line uses color coding to communicate state:
 
 2. **Restart Claude Code** to apply the new configuration.
 
-### How It Works
+#### How It Works
 
 **`settings.json`**
 - Enables the custom status line command (ensure that the path to the statusline-command.sh is correct)
@@ -63,13 +67,19 @@ This gives you an accurate representation of when Claude Code will trigger auto-
 
 ---
 
-## Design Prompts
+## Prompts
+
+Curated prompts and reference documents for AI-assisted development.
+
+### Design Principles
+
+**File:** [`prompts/design/design_principles.md`](prompts/design/design_principles.md)
 
 A comprehensive reference document covering fundamental design and accessibility principles for building high-quality software interfaces.
 
-### What's Included
+#### What's Included
 
-**`prompts/design/design_principles.md`** consolidates four essential frameworks:
+This document consolidates four essential frameworks:
 
 1. **Dieter Rams' 10 Principles of Good Design**
    - Originally for physical products, adapted for software
