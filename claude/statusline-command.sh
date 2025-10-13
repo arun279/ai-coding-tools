@@ -50,7 +50,13 @@ try:
         except:
             pass
 
-    print(f'{folder} {model_id} {transcript} {context_used} {context_limit}')
+    # Add autocompact buffer to show space until autocompact triggers
+    # Autocompact triggers at ~95% capacity, leaving ~10% as buffer
+    # This matches /context behavior of showing "used" space including buffer
+    autocompact_buffer = int(context_limit * 0.225)  # 22.5% buffer (~45k for 200k)
+    context_used_with_buffer = context_used + autocompact_buffer
+
+    print(f'{folder} {model_id} {transcript} {context_used_with_buffer} {context_limit}')
 except:
     print('     unknown  0 0')
 " 2>/dev/null)
@@ -144,19 +150,20 @@ if [ "$CONTEXT_LIMIT" -gt 0 ] && [ "$CONTEXT_USED" -gt 0 ]; then
     fi
 
     # Smart warning levels based on percentage
-    if [ "$CONTEXT_PCT" -ge 80 ]; then
-        # DANGER: Auto-compact imminent
+    # Now that we include autocompact buffer, thresholds are higher
+    if [ "$CONTEXT_PCT" -ge 95 ]; then
+        # DANGER: Auto-compact imminent (at or past 95% = autocompact threshold)
         CONTEXT_PREFIX="!"
         CONTEXT_BG="$BG_RED"
         CONTEXT_FG="$FG_WHITE"
         CONTEXT_STYLE="$BOLD"
-    elif [ "$CONTEXT_PCT" -ge 70 ]; then
-        # WARNING: Approaching limit
+    elif [ "$CONTEXT_PCT" -ge 90 ]; then
+        # WARNING: Approaching auto-compact zone (90-94%)
         CONTEXT_PREFIX="+"
         CONTEXT_BG="$BG_YELLOW"
         CONTEXT_FG="$FG_BLACK"
     else
-        # NORMAL: All good
+        # NORMAL: All good (below 90%)
         CONTEXT_PREFIX=""
         CONTEXT_BG="$BG_GRAY"
         CONTEXT_FG="$FG_WHITE"
@@ -193,9 +200,9 @@ if [ -n "$CONTEXT_DISPLAY" ]; then
     OUTPUT="${OUTPUT}${FG_PURPLE}${CONTEXT_BG}${SEP}${CONTEXT_BG}${CONTEXT_FG}${CONTEXT_STYLE} ${CONTEXT_DISPLAY} ${RESET}"
 
     # Final separator color matches context background
-    if [ "$CONTEXT_PCT" -ge 80 ]; then
+    if [ "$CONTEXT_PCT" -ge 95 ]; then
         OUTPUT="${OUTPUT}${FG_RED}${SEP}"
-    elif [ "$CONTEXT_PCT" -ge 70 ]; then
+    elif [ "$CONTEXT_PCT" -ge 90 ]; then
         OUTPUT="${OUTPUT}${FG_YELLOW}${SEP}"
     else
         OUTPUT="${OUTPUT}${FG_GRAY}${SEP}"
