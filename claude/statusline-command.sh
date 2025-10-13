@@ -96,12 +96,12 @@ SEP=""
 GIT_BRANCH=""
 GIT_STATUS="✓"
 GIT_BG="$BG_GREEN"
-if git rev-parse --git-dir > /dev/null 2>&1; then
-    BRANCH=$(git --no-optional-locks branch --show-current 2>/dev/null)
+if git -C "$FOLDER" rev-parse --git-dir > /dev/null 2>&1; then
+    BRANCH=$(git -C "$FOLDER" --no-optional-locks branch --show-current 2>/dev/null)
     if [ -n "$BRANCH" ]; then
         GIT_BRANCH="$BRANCH"
-        # Check if working directory is clean
-        if ! git diff-index --quiet HEAD -- 2>/dev/null; then
+        # Check if working directory is clean (using porcelain to avoid stale index issues)
+        if [ -n "$(git -C "$FOLDER" --no-optional-locks status --porcelain 2>/dev/null)" ]; then
             GIT_STATUS="●"
             GIT_BG="$BG_RED"
         fi
