@@ -17,6 +17,15 @@ Use this workflow when:
 
 Do not use Codex commit, push, deploy, or edit global config unless the user explicitly asked for that.
 
+## Execution context
+
+This codex-implementation skill is a runbook for whichever agent executes it, and the executor determines the mechanics:
+
+- **Main/orchestrator context:** do not run `codex` here. Spawn a thin wrapper agent (a cheap model such as Sonnet at low effort) whose prompt carries this skill's workflow and the task specifics, and have the wrapper run `codex`. Inside a Workflow, label the wrapper `gpt-5.6-sol:<task>` so the true worker is visible in the progress UI.
+- **Wrapper or subagent context:** run `codex` directly via Bash exactly as described below. Do not spawn further wrappers. This rule never nests: one wrapper, then codex.
+
+This keeps long codex runs observable (they appear as agents/workflow lanes, not invisible background shells) and prevents recursive wrapping.
+
 ## Workflow
 
 1. Pin the current state with `git status --short` and note any user changes already present.

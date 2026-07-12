@@ -9,6 +9,15 @@ Use Codex as a separate local verification agent when the task needs real UI int
 
 Do not use this for ordinary code reading, typechecking, linting, or tests Claude can run directly. Launching apps, simulators, or browsers to verify the requested work is fine without asking; ask first only if the run could disrupt the user's environment beyond that (closing their apps, changing system settings, acting on real accounts or data).
 
+## Execution context
+
+This codex-computer-use skill is a runbook for whichever agent executes it, and the executor determines the mechanics:
+
+- **Main/orchestrator context:** do not run `codex` here. Spawn a thin wrapper agent (a cheap model such as Sonnet at low effort) whose prompt carries this skill's workflow and the task specifics, and have the wrapper run `codex`. Inside a Workflow, label the wrapper `gpt-5.6-sol:<task>` so the true worker is visible in the progress UI.
+- **Wrapper or subagent context:** run `codex` directly via Bash exactly as described below. Do not spawn further wrappers. This rule never nests: one wrapper, then codex.
+
+This keeps long codex runs observable (they appear as agents/workflow lanes, not invisible background shells) and prevents recursive wrapping.
+
 ## Workflow
 
 1. Create a temporary artifact directory.

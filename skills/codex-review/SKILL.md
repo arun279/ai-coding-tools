@@ -9,6 +9,15 @@ Use Codex as an independent reviewer when the user wants a second-pass review or
 
 Prefer Claude's normal review process for small local checks. Do not delegate review just to avoid reading the code yourself. Treat Codex's output as not authority.
 
+## Execution context
+
+This codex-review skill is a runbook for whichever agent executes it, and the executor determines the mechanics:
+
+- **Main/orchestrator context:** do not run `codex` here. Spawn a thin wrapper agent (a cheap model such as Sonnet at low effort) whose prompt carries this skill's workflow and the task specifics, and have the wrapper run `codex`. Inside a Workflow, label the wrapper `gpt-5.6-sol:<task>` so the true worker is visible in the progress UI.
+- **Wrapper or subagent context:** run `codex` directly via Bash exactly as described below. Do not spawn further wrappers. This rule never nests: one wrapper, then codex.
+
+This keeps long codex runs observable (they appear as agents/workflow lanes, not invisible background shells) and prevents recursive wrapping.
+
 ## Workflow
 
 1. Identify the review target: uncommitted changes, base branch, commit SHA, PR checkout, or specific files.
