@@ -13,24 +13,26 @@ Prefer Claude's normal review process for small local checks. Do not delegate re
 
 1. Identify the review target: uncommitted changes, base branch, commit SHA, PR checkout, or specific files.
 2. Create a temporary artifact directory for the Codex report.
-3. Run `codex review` with a focused review prompt.
+3. Run `codex review`, choosing exactly one target (see below).
 4. Read Codex's report and verify important claims against the code before presenting them.
 
-Use one of these command shapes:
+A review target and a custom prompt are mutually exclusive in `codex review`: pick exactly one of `--uncommitted`, `--base`, `--commit`, or a `PROMPT`. This is intended Codex behavior, not a bug to work around. The final review is written to stdout; progress and the diff go to stderr, so redirect stdout to capture the report.
 
 ```bash
-ARTIFACT_DIR="${TMPDIR:-/tmp}/codex-review.XXXXXX"
+ARTIFACT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/codex-review.XXXXXX")"
 REPORT="$ARTIFACT_DIR/report.md"
 PROMPT="$ARTIFACT_DIR/prompt.md"
 
-# Review staged, unstaged, and untracked changes.
-codex -C "$PWD" review --uncommitted - < "$PROMPT" > "$REPORT"
+# Uncommitted working tree WITH focused instructions. Prompt-only review defaults
+# to the uncommitted diff, so this is how you pass a custom review stance. Write
+# the instructions to $PROMPT first, then:
+codex -C "$PWD" review - < "$PROMPT" > "$REPORT"
 
-# Review current branch against a base branch.
-codex -C "$PWD" review --base main - < "$PROMPT" > "$REPORT"
-
-# Review a single commit.
-codex -C "$PWD" review --commit <sha> - < "$PROMPT" > "$REPORT"
+# Base branch or single commit. The native target flags do NOT accept a custom
+# prompt in this CLI, so these run Codex's built-in reviewer with no extra
+# instructions. Fold focus into the target instead (e.g. review one commit).
+codex -C "$PWD" review --base main > "$REPORT"
+codex -C "$PWD" review --commit <sha> > "$REPORT"
 ```
 
 ## Review Prompt
@@ -49,7 +51,7 @@ Prioritze findings over summary. For each finding include:
 Do not edit files. If there are no substantive findings, say so and name any residual test gaps.
 ```
 
-Add task-specific context when useful: requirements, risky areas, expected behavior, relevant tests, or files Claude is unsure about.
+Add task-specific context when useful: requirements, risky areas, expected behavior, relevant tests, or files Claude is unsure about. This custom prompt only applies to the uncommitted (prompt-only) path above; `--base` and `--commit` reviews cannot take a prompt, so narrow the target itself when you need focus.
 
 ## Reporting back
 

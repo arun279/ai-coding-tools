@@ -40,8 +40,10 @@ codex exec \
   --add-dir "$ARTIFACT_DIR" \
   -s workspace-write \
   -o "$REPORT" \
-  "$(cat "$PROMPT")"
+  "$(cat "$PROMPT")" </dev/null
 ```
+
+Always redirect stdin from `/dev/null`. `codex exec` appends piped stdin to the prompt as a `<stdin>` block, so in any non-interactive context (this harness, a background job, an overnight workflow) stdin is a pipe that never sends EOF and Codex blocks forever waiting on it. Codex runs also routinely exceed the harness's ~10-minute Bash timeout: launch this in the background and poll `$REPORT` and `git status` instead of waiting in the foreground. (macOS has no `timeout` binary, so do not wrap the call in one.)
 
 Use `-s workspace-write` by default. Use `-s danger-full-access` only when the implementation truly needs access outside the repo, app launch automation, simulator work, package manager global state, or other machine-level operations.
 
