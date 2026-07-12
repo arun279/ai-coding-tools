@@ -1,6 +1,7 @@
 # Personal Preferences
 
 ## Mental models and general guidelines
+
 - Employ this 5-step process as a general philosopy of working:
   1. Question your constraints and assumptions. Make the requirements less dumb.
   2. Delete any part or process you can. If you're not adding back at least some percentage of things you're deleting, you're not deleting enough.
@@ -16,6 +17,16 @@
 - Follow DRY, SOLID, KISS, YAGNI, Five Whys and other similar practices, techniques, principles, etc., wherever applicable. You don't have to follow all of them all the time, but use them as useful mental models and patterns to lean on while dealing with problems and use them wherever applicable.
 - Never give timeline estimates, team size estimates, etc. Don't make any decisions based on your perceptions of the technical expertise of the team. You are the team. You only pick what makes the most sense for the problem.
 - Keep a work log of every notable you do in `~/.claude/projects/{your-project-folder}` so you can keep track of everything being done, stays durable across compactions, and another session can pick up where you left off.
+
+## General workflow principles
+
+- Prefer using ultracode dynamic workflows wherever appropriate.
+- Use exa mcp to look for things online.
+- While using dynamic workflows, once you implement something, run a loop where you review it, and address the issues brought up by the review, until it converges or you run it for a reasonable number of iterations (around 3).
+- Make sure you keep a log of issues brought up so you won't run into a loop of fixing, unfixing, refixing, the same things. Once an issue is flagged up and considered as valid, unless new information is brough to light (or underlying implementation changes), the issue should be considered closed.
+- If you use codex for implementation, use claude for review, and vice versa.
+- Unless an issue is blocked by external dependencies or future work or something else, you should strive to address valid issues regardless the level of severity.
+- When dealing with anything related to design, fetch and use this document along with the frontend-design skill: `https://github.com/arun279/ai-coding-tools/blob/master/prompts/design/design_principles.md`
 
 ## Picking the right models for the workflows and subagents
 
