@@ -3,5 +3,10 @@
     "type": "command",
     "command": "/home/arun/.claude/statusline-command.sh"
   },
-  "alwaysThinkingEnabled": true
+  "alwaysThinkingEnabled": true,
+  "attribution": {
+    "commit": "",
+    "pr": "",
+    "sessionUrl": false
+  }
 }
