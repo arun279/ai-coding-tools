@@ -52,9 +52,20 @@ codex exec \
   "$(cat "$PROMPT")" </dev/null
 ```
 
-Always redirect stdin from `/dev/null`. `codex exec` appends piped stdin to the prompt as a `<stdin>` block, so in any non-interactive context (this harness, a background job, an overnight workflow) stdin is a pipe that never sends EOF and Codex blocks forever waiting on it. Codex runs also routinely exceed the harness's ~10-minute Bash timeout: launch this in the background and poll `$REPORT` and `git status` instead of waiting in the foreground. (macOS has no `timeout` binary, so do not wrap the call in one.)
+Always redirect stdin from `/dev/null`. `codex exec` appends piped stdin to the prompt as a `<stdin>` block, so in any non-interactive context (this harness, a background job, an overnight workflow) stdin is a pipe that never sends EOF and Codex blocks forever waiting on it. Codex runs routinely exceed the harness's ~10-minute Bash timeout, but **never end your turn while codex is still running** — how you wait depends on where you are:
+
+- **A wrapper agent inside a Workflow lane:** run codex in the FOREGROUND with a long Bash timeout. Do NOT `run_in_background`, and do NOT end your turn to "wait for a notification" — inside a workflow, ending your turn returns your last message as the lane's result and abandons the codex process, losing its branch/report. If the foreground call times out, run another foreground continuation round against the same working directory (its progress persists on disk); repeat a bounded number of times, then report `VERDICT=BLOCKED` if still unfinished.
+- **A standalone subagent wrapper:** if you `run_in_background`, you MUST poll for the report file in a loop within the SAME turn and finish only once it exists (or codex has exited). Launching a background codex and then ending your turn abandons the run — nobody reads the report.
+
+(macOS has no `timeout` binary, so do not wrap the call in one.)
+
+`-o` writes only codex's FINAL message; if codex is killed or exhausts its budget before finishing, `-o` is empty. For long or risky runs, have codex write durable artifacts as it works (the report file, intermediate output) so a terminated run still leaves usable evidence — don't depend on `-o` alone.
 
 Use `-s workspace-write` by default. Use `-s danger-full-access` only when the implementation truly needs access outside the repo, app launch automation, simulator work, package manager global state, or other machine-level operations.
+
+Note: `-s workspace-write` blocks binding to `localhost`. If codex's verification runs a dev server or test runner that binds a port (Vitest under a Vite/WXT server, Playwright's webServer), it fails with `listen EPERM`. Grant `-s danger-full-access` for that run, or run that verification step yourself outside codex.
+
+Model tier: `codex exec` accepts `-m <model>` and reasoning-effort config (`-c model_reasoning_effort="low|medium|high"`); `codex debug models` lists the catalog. Match the tier to the task — reserve the frontier model (gpt-5.6-sol) for hard implementation; a cheaper balanced model (e.g. gpt-5.6-terra) at low reasoning is enough for bulk/mechanical work.
 
 ## Prompt Requirements
 

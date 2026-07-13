@@ -44,6 +44,8 @@ codex -C "$PWD" review --base main > "$REPORT"
 codex -C "$PWD" review --commit <sha> > "$REPORT"
 ```
 
+A large diff can still exceed the Bash timeout: run codex review in the FOREGROUND. Inside a Workflow lane, never `run_in_background` and never end your turn to wait — that returns your last message as the lane's result and abandons the run. Crucially, **distinguish "codex found nothing" from "codex failed/timed out"** — an empty or truncated report is NOT a clean review; retry once with a narrower target (a single commit) and, if it still produces no analysis, report "review unavailable" rather than "no findings." `codex review` accepts `-m <model>` / `-c model_reasoning_effort=...`; review is judgment-heavy, so keep the frontier tier (gpt-5.6-sol) unless the diff is trivial.
+
 ## Review Prompt
 
 Ask Codex to use a code-review stance:

@@ -41,7 +41,14 @@ codex exec \
   "$(cat "$PROMPT")" </dev/null
 ```
 
-Always redirect stdin from `/dev/null`. `codex exec` appends piped stdin to the prompt as a `<stdin>` block, so in any non-interactive context (this harness, a background job, an overnight workflow) stdin is a pipe that never sends EOF and Codex blocks forever waiting on it. Codex runs also routinely exceed the harness's ~10-minute Bash timeout: launch this in the background and poll `$REPORT` instead of waiting in the foreground. (macOS has no `timeout` binary, so do not wrap the call in one.)
+Always redirect stdin from `/dev/null`. `codex exec` appends piped stdin to the prompt as a `<stdin>` block, so in any non-interactive context (this harness, a background job, an overnight workflow) stdin is a pipe that never sends EOF and Codex blocks forever waiting on it. Codex runs routinely exceed the harness's ~10-minute Bash timeout, but **never end your turn while codex is still running** — how you wait depends on where you are:
+
+- **A wrapper agent inside a Workflow lane:** run codex in the FOREGROUND with a long Bash timeout. Do NOT `run_in_background`, and do NOT end your turn to "wait for a notification" — inside a workflow, ending your turn returns your last message as the lane's result and abandons the codex process. If it times out, run a foreground continuation round against the same artifact directory.
+- **A standalone subagent wrapper:** if you `run_in_background`, poll for the report file in a loop within the SAME turn and finish only once it exists (or codex has exited). Launching a background codex and then ending your turn abandons the run — nobody reads the report or cleans up the launched app. (Belt-and-suspenders: the caller can also watch for the report file independently.)
+
+(macOS has no `timeout` binary, so do not wrap the call in one.)
+
+`-o` captures only codex's FINAL message; a computer-use run that is killed or exhausts its budget mid-flow leaves `-o` empty. Have codex write durable artifacts as it works — screenshots and an incrementally-updated report file — so a terminated run still yields evidence (this session's real runs died before the final message but the screenshots survived and were enough to reconstruct the result).
 
 Use `-s danger-full-access` for GUI automation, iOS simulators, desktop app launching, screenshots, or access outside the repo. For non-GUI checks that only need the repo and artifact directory, prefer `-s workspace-write`. Add `--skip-git-repo-check` when the working directory is not a git repository.
 
@@ -67,5 +74,6 @@ Tell Codex:
 - Where screenshots, logs, and the final report should be saved.
 - To return pass, fail, or blocked, plus steps performed, observed behavior, screenshot paths, and actionable feedback.
 - If a GUI action is refused, to report the exact error verbatim (e.g. `not allowed assistive access`, `could not create image from display`, Apple Events consent), so the missing macOS permission is identifiable rather than reported as a generic failure.
+- When automating a THROWAWAY app instance (e.g. a scratch browser profile via `--user-data-dir`), to target that instance's own PID/window. It must NOT activate the app by bundle id — that raises the user's REAL instance — and must never synthesize untargeted global keystrokes, which can land in the wrong window and act on the user's real session. Kill only the throwaway instance when done. (Real failure mode observed: a run activated the user's real browser and issued a stray search before isolation was tightened.)
 
 Keep the prompt specific enough that Codex does not need the surrounding Claude conversation.
