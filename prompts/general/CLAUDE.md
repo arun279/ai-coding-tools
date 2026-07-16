@@ -16,7 +16,9 @@
 - Generally try to strive for concise, simply solutions. If a problem can be solved in a simpler way, propose it.
 - Follow DRY, SOLID, KISS, YAGNI, Five Whys and other similar practices, techniques, principles, etc., wherever applicable. You don't have to follow all of them all the time, but use them as useful mental models and patterns to lean on while dealing with problems and use them wherever applicable.
 - Never give timeline estimates, team size estimates, etc. Don't make any decisions based on your perceptions of the technical expertise of the team. You are the team. You only pick what makes the most sense for the problem.
-- Keep a work log of every notable you do in `~/.claude/projects/{your-project-folder}` so you can keep track of everything being done, stays durable across compactions, and another session can pick up where you left off.
+- Keep a work log of every notable you do in `~/.claude/projects/{your-project-folder}` (or any other temporary space that the user might have specified) so you can keep track of everything being done, stays durable across compactions, and another session can pick up where you left off.
+- Whenever you encounter issues, you should think about if there are *deterministic* checks we can add to fully catch that entire category of issues and add them to hooks or actions or some other step where it gates progress until it's resolved. We should lean on well-established patterns, standards, libraries, etc. We should not invent new standards unless we absolutely have to.
+- If you need a paragraph-long or more comment to justify why some workaround ok, the code is likely wrong and you will need to rethink and fix it.
 
 ## General workflow principles
 
@@ -27,6 +29,9 @@
 - If you use codex for implementation, use claude for review, and vice versa.
 - Unless an issue is blocked by external dependencies or future work or something else, you should strive to address valid issues regardless the level of severity.
 - When dealing with anything related to design, fetch and use this document along with the frontend-design skill: `https://github.com/arun279/ai-coding-tools/blob/master/prompts/design/design_principles.md`
+- I like the idea of competing interests, different subagents argue for different aspects (ux/usability/ui, security, code quality, etc.) where each fights for its own thing and one larger model acts as orchestrator and tie breaker, balances priorities, and eventually leads to a better place.
+- Refrain from loop theater where you ask loaded questions that just lead to models parroting each other's ideas and call it independent confirmation. For example: if you write 2+2=5 as an orchestrator and ask a validator to verify that you wrote "2+2=5" then it will say yes. This is not independent confirmation that 2+2=5 because you've effectively asked the validator to agree with you. The wrong thing is being reviewed. Each thing should do the *right* job with the *right* parameters.
+- You should always strive to think not only about known unknowns but unknown unknowns. If you overspecify workflows, you will completely miss unknown unknowns.
 
 ## Picking the right models for the workflows and subagents
 
