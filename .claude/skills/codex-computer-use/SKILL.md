@@ -52,6 +52,8 @@ Always redirect stdin from `/dev/null`. `codex exec` appends piped stdin to the 
 
 Use `-s danger-full-access` for GUI automation, iOS simulators, desktop app launching, screenshots, or access outside the repo. For non-GUI checks that only need the repo and artifact directory, prefer `-s workspace-write`. Add `--skip-git-repo-check` when the working directory is not a git repository.
 
+Caveat worth checking in your own environment: in a non-interactive / auto permission mode, the harness's Bash classifier can DENY `codex exec -s danger-full-access` outright (observed this session for a wrapper run). Since the GUI default above assumes that mode, confirm the invocation is actually permitted before building a lane on it: if it is refused, no prompt tuning recovers it, and you fall back to `-s workspace-write` for whatever does not truly need full access.
+
 ## macOS permissions and unattended runs
 
 Computer-use fails *silently* when a required macOS permission is missing, because an unattended run cannot answer the consent dialog that would grant it. macOS attributes these TCC permissions to the **terminal app that launched codex** (Ghostty, iTerm, Terminal, ...), not to `codex` itself — so grant them to that app once, in System Settings > Privacy & Security, before relying on an overnight run. Do not confuse this with OpenAI's standalone ChatGPT / "Codex Computer Use" desktop app, which appears as its own entry in the permission lists: it is a different product, and granting *it* does nothing for the `codex exec` CLI this skill drives. If unsure which terminal is the responsible app, trace the process ancestry up to the `.app` (e.g. `ps -o ppid=,comm= -p $$` walked to the top). The three permissions are independent; holding one does not imply the others:
@@ -62,7 +64,18 @@ Computer-use fails *silently* when a required macOS permission is missing, becau
 
 Also for unattended runs: keep the machine logged in and unlocked (the lock screen and login window block both capture and UI control), and pre-install any heavier tooling the task needs (Xcode + `xcrun simctl` for the iOS Simulator, Playwright/WebDriver for browser automation) so the run does not stall on a first-use install or download.
 
-Before trusting an overnight computer-use workflow, verify the grants are actually in place rather than assuming: `osascript -e 'tell application "System Events" to return UI elements enabled'` should print `true` (Accessibility), and a probe `screencapture -x /tmp/probe.png` should yield a non-empty file (Screen Recording + live display). If either check fails, fix the grant before scheduling the run.
+Before trusting an overnight computer-use workflow, verify the grants are actually in place rather than assuming: `osascript -e 'tell application "System Events" to return UI elements enabled'` should print `true` (Accessibility), and a probe `screencapture -x /tmp/probe.png` should yield a non-empty file (Screen Recording + live display). If either check fails, fix the grant before scheduling the run. Prefer this behavioral check over asking the user to open System Settings: the terminal often already holds the grants.
+
+## Driving the real UI: the framework launches, the OS drives
+
+When the check needs the REAL OS-drawn surface (a browser's toolbar popup, a native permission or file dialog, a menu bar) rather than a page a framework can reach, use the framework (Playwright/WebDriver) only to LAUNCH the app and discover ids; drive everything after with the OS itself. A framework page pointed at, say, `popup.html` is never the OS-drawn floating window and must not be reported as real-surface verification.
+
+- Read real geometry from the accessibility tree in points (`System Events` AX queries); do not guess pixel coordinates off a screenshot. The AX process name must be exact, e.g. `Google Chrome for Testing`, not `Google Chrome`, or every AX query silently matches nothing.
+- Click with a real synthetic pointer event (`cliclick c:<x>,<y>`; `brew install cliclick`, not preinstalled). System Events `click` / `perform action "AXPress"` can open a transient popup and dismiss it in the same gesture; a real pointer event does not.
+- Capture with `screencapture -R<x,y,w,h> -x <path>`: `-R` takes POINT coordinates and rasterizes at the display's native density automatically, so no manual DPI math.
+- To open a browser extension's real toolbar popup, send its manifest `_execute_action` keyboard command as a keystroke to the focused test window, rather than driving `popup.html`.
+- A lane that clicks absolute screen coordinates must be STRICTLY EXCLUSIVE of any other headed/GUI run. Another window stealing focus makes it click the wrong window and screenshot the wrong pixels, and it fails silently (a plausible screenshot of the wrong thing), so run it as its own sole phase, not merely "one at a time".
+- After the run, kill leftovers by the PIDs you launched, not by a loose name match: killing the browser alone can leave a still-running test process that relaunches browsers, and a broad `pgrep`/`pkill` also matches unrelated daemons and the user's own real instances.
 
 ## Prompt Requirements
 

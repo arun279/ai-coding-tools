@@ -59,6 +59,8 @@ Always redirect stdin from `/dev/null`. `codex exec` appends piped stdin to the 
 
 (macOS has no `timeout` binary, so do not wrap the call in one.)
 
+Judging whether a long run is alive: at 0% CPU codex is normally waiting on the model API, not wedged, so read a growing `git diff --stat` (or a live build/test child process), not CPU. Do not rely on ending your turn or `TaskStop` to reap what codex spawned: track the PIDs and kill them explicitly, and note that a still-running test process can keep relaunching browsers (a Playwright run on retry), so kill the runner, not just the browser.
+
 `-o` writes only codex's FINAL message; if codex is killed or exhausts its budget before finishing, `-o` is empty. For long or risky runs, have codex write durable artifacts as it works (the report file, intermediate output) so a terminated run still leaves usable evidence — don't depend on `-o` alone.
 
 Use `-s workspace-write` by default. Use `-s danger-full-access` only when the implementation truly needs access outside the repo, app launch automation, simulator work, package manager global state, or other machine-level operations.
@@ -77,7 +79,7 @@ Tell Codex:
 - Files or behavior that must not be changed.
 - That it must preserve unrelated user changes.
 - That it must not commit, push, deploy, or edit global config.
-- Which verification commands to run, or to explain why they were skipped.
+- Which verification commands to run, or to explain why they were skipped. Have it run each on its own and capture the status immediately (`<cmd>; echo "EXIT=$?"`), then report that code verbatim beside the pass/fail summary lines: a pipeline like `<cmd> | tee log` reports only the last stage's status (the `tee`), and a `;` sequence reports only the trailing command, so either can mask a real failure as a false "passed".
 - To write a concise final report with files changed, verification, and unresolved questions.
 
 Keep the task bounded. If the requested work bundles several substantial changes, split it into separate Codex runs or ask the user to choose the first scope.
