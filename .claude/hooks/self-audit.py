@@ -1,30 +1,17 @@
 #!/usr/bin/env python3
 """Periodic re-grounding checkpoint for a long autonomous Claude Code session.
 
-A PostToolUse hook that, at most once per INTERVAL_SECONDS, injects a block of
-`additionalContext` into the MAIN conversation so a long unattended run gets
-re-grounded before drift or stale assumptions compound. The block reproduces the
-working model (~/.claude/CLAUDE.md), points at the session's memories and durable
-notes to re-read, reports the REAL context-window usage measured from the
-transcript, and ends by making the agent WRITE a short status (a forcing function:
-a passively re-read reminder falls into a low-attention region and gets skimmed,
-whereas self-authored, ground-truth-tied text lands in the model's own attention).
+A PostToolUse hook that, at most once per INTERVAL_SECONDS, injects a short block of `additionalContext` into the MAIN conversation so a long unattended run gets re-grounded before drift or stale assumptions compound.
 
-Why PostToolUse and not Stop: the target case is a run that is NOT yielding to the
-user, which is exactly when a Stop hook would not fire. PostToolUse fires through a
-heads-down burst, and its per-call cost is a cheap stat that bails until the timer
-is due.
+Why it POINTS at the instructions instead of inlining them: Claude Code caps hook output (additionalContext / systemMessage / stdout) at 10,000 characters and replaces anything larger with a 2KB preview plus a file path. ~/.claude/CLAUDE.md alone now exceeds that cap, so an inlined copy is delivered only as a truncated preview and the actual instructions never reach the model. An earlier version of this hook inlined the full file and hit exactly that: the model received a header and the first ~15 lines of CLAUDE.md, and none of the ask. So this block stays well under the cap and DIRECTS the model to re-read the live files, which also gives it the current instructions rather than a stale copy.
 
-Scoping: subagent tool calls fire PostToolUse with the same session_id and
-transcript_path as the main loop, but only they carry agent_id/agent_type. Their
-absence identifies a main-loop call, so the checkpoint lands in the driving context
-and subagents never burn the interval.
+The block carries three things, all delivered whole: a directive to re-read the working model + memories + this task's durable artifacts, the REAL context-window usage measured from the transcript, and a forcing function (write a short status) so the checkpoint lands in the model's own output instead of being skimmed.
 
-Cadence: a per-session clock file under the temp dir. The first tool call only
-starts the clock (CLAUDE.md is still fresh at session start); thereafter the block
-is injected once the clock is older than INTERVAL_SECONDS. The interval is claimed
-under an flock so a parallel tool batch crossing the threshold injects once, not
-once per tool.
+Why PostToolUse and not Stop: the target case is a run that is NOT yielding to the user, which is exactly when a Stop hook would not fire. PostToolUse fires through a heads-down burst, and its per-call cost is a cheap stat that bails until due.
+
+Scoping: subagent tool calls fire PostToolUse with the same session_id and transcript_path as the main loop, but only they carry agent_id/agent_type. Their absence identifies a main-loop call, so the checkpoint lands in the driving context and subagents never burn the interval.
+
+Cadence: a per-session clock file under the temp dir. The first tool call only starts the clock; thereafter the block is injected once the clock is older than INTERVAL_SECONDS. The interval is claimed under an flock so a parallel tool batch crossing the threshold injects once, not once per tool.
 """
 import fcntl
 import json
@@ -36,17 +23,25 @@ import time
 
 INTERVAL_SECONDS = int(os.environ.get("SELF_AUDIT_INTERVAL_SECONDS", 1800))
 
+# The injected checkpoint. Plain WYSIWYG template: each paragraph is one line, real newlines are real
+# newlines in the output, and {minutes}/{targets}/{context} are filled in by build_injection. Edit freely.
+INJECTION = """Automated re-grounding checkpoint: a periodic timer (about every {minutes} minutes) fired this between your tool calls, so it is not a message from the user. On a long run your standing instructions scroll out of attention and drift sets in unnoticed. Do not skim this.
+
+First, before your next tool call, RE-READ these in full now. They are your operating instructions and the current source of truth; do not trust your memory of them, and this checkpoint's questions assume you have just re-read them:
+{targets}{context}
+
+Then write a short status to the chat, so this checkpoint lands in your own output instead of being skimmed. Make it specific to right now, not a generic reassurance, four lines:
+- the task(s) you are actively working on;
+- your last non-trivial decision and the ~/.claude/CLAUDE.md principle it followed or bent (name the principle, which requires having just re-read the file);
+- what your measured context above means: keep going, or start a handoff;
+- your next concrete step(s).
+If re-reading surfaces a drift from your instructions or memories, correct it before continuing and say what you changed."""
+
 
 def measure_context_tokens(transcript_path):
     """Real context-window occupancy from the last main-loop usage block.
 
-    Streams the transcript (holding one line at a time, so memory is bounded even
-    for a large file) and parses only lines that carry a usage object, skipping the
-    many tool-result and user lines cheaply. Sums the input side of the most recent
-    assistant turn (input + cache_read + cache_creation), which is exactly Claude
-    Code's own `used_percentage` formula (output tokens are excluded). Returns None
-    if the transcript cannot be read or has no usage block, so an unmeasurable run
-    injects no number rather than a guessed one.
+    Streams the transcript (one line at a time, so memory is bounded even for a large file) and parses only lines carrying a usage object. Sums the input side of the most recent assistant turn (input + cache_read + cache_creation), which is exactly Claude Code's own used_percentage formula (output tokens excluded). Returns None if unreadable or no usage block, so an unmeasurable run injects no number rather than a guessed one.
     """
     latest_usage = None
     try:
@@ -68,50 +63,32 @@ def measure_context_tokens(transcript_path):
         return None
     if latest_usage is None:
         return None
-    return (
-        latest_usage.get("input_tokens", 0)
-        + latest_usage.get("cache_read_input_tokens", 0)
-        + latest_usage.get("cache_creation_input_tokens", 0)
-    )
+    return latest_usage.get("input_tokens", 0) + latest_usage.get("cache_read_input_tokens", 0) + latest_usage.get("cache_creation_input_tokens", 0)
 
 
 def context_usage_line(transcript_path):
     tokens = measure_context_tokens(transcript_path) if transcript_path else None
     if tokens is None:
         return None
-    return (
-        f"Your context usage, read from your own transcript rather than estimated: about {tokens:,} "
-        f"tokens are in your context window as of your last turn (roughly {tokens / 1_000_000 * 100:.0f}% "
-        f"of a 1M-token window, {tokens / 200_000 * 100:.0f}% of a 200K-token window). Use the size of "
-        "your own window to turn that into a real utilization, and judge your context-limit rule against "
-        "that number instead of a feeling."
-    )
+    return f"Your context usage, read from your own transcript rather than estimated: about {tokens:,} tokens are in your context window as of your last turn (roughly {tokens / 1_000_000 * 100:.0f}% of a 1M-token window, {tokens / 200_000 * 100:.0f}% of a 200K-token window). Use the size of your own window to turn that into a real utilization, and judge your context-limit rule against that number instead of a feeling."
 
 
-def memory_pointers(transcript_path):
-    """Concrete paths to the memory stores Claude Code creates by convention.
-
-    Only the user-level and project-level memory directories, since those are part
-    of the standard layout and can be located reliably. Task-specific artifacts
-    (plans, handoffs, worklogs) are NOT enumerated here because they are not created
-    by default and may not exist; the injected text asks Claude to find its own.
-    """
-    pointers = []
+def reread_targets(transcript_path):
+    """The paths to re-read: the working model, then the memory stores Claude Code creates by convention. Task-specific artifacts are not enumerated (they are not created by default); the injected text asks the model to find its own."""
+    targets = ["- ~/.claude/CLAUDE.md (your working model)"]
     user_memory = pathlib.Path.home() / ".claude" / "memory"
     if user_memory.is_dir():
-        pointers.append(f"- your user-level memories: {user_memory}")
+        targets.append(f"- your user-level memories: {user_memory}")
     if transcript_path:
         project_memory = pathlib.Path(transcript_path).parent / "memory"
         if project_memory.is_dir():
-            pointers.append(
-                f"- your project memories: {project_memory} (start with MEMORY.md, then the files it indexes)"
-            )
-    return "\n".join(pointers)
+            targets.append(f"- your project memories: {project_memory} (start with MEMORY.md, then the files it indexes)")
+    targets.append("- any durable artifacts you have made for this task (plan, handoff, worklog, decision log, scratchpad notes); find them yourself, do not assume a path")
+    return "\n".join(targets)
 
 
 def claim_interval(clock):
-    """True if this call may inject now. Reset the interval under an flock so that
-    concurrent hooks from a parallel tool batch let exactly one through."""
+    """True if this call may inject now. Reset the interval under an flock so that concurrent hooks from a parallel tool batch let exactly one through."""
     try:
         with open(clock, "r+") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
@@ -123,48 +100,13 @@ def claim_interval(clock):
         return False
 
 
-def build_injection(transcript_path, claude_md):
-    pointers = memory_pointers(transcript_path)
-    if pointers:
-        memory_section = (
-            "Re-read your standing memories rather than trust your recollection of them, since another "
-            "session may have changed them since you last looked:\n" + pointers
-        )
-    else:
-        memory_section = (
-            "Re-read your standing user-level and project-level memories rather than trust your "
-            "recollection of them."
-        )
-    memory_section += (
-        "\nThen find and skim any durable artifacts you have created for this task (plans, handoffs, "
-        "decision logs, worklogs, scratchpad notes) and pull in what is relevant. Do not assume any "
-        "particular file exists; look for what is actually there."
+def build_injection(transcript_path):
+    ctx = context_usage_line(transcript_path)
+    return INJECTION.format(
+        minutes=INTERVAL_SECONDS // 60,
+        targets=reread_targets(transcript_path),
+        context=f"\n\n{ctx}" if ctx else "",
     )
-
-    sections = [
-        f"Automated re-grounding checkpoint: a periodic timer (about every {INTERVAL_SECONDS // 60} minutes) "
-        "placed this between your tool calls, so it is not a message from the user. Long autonomous runs "
-        "are where standing instructions quietly go stale and process drift creeps in unnoticed, which is "
-        "why the material below is reproduced as current ground truth.",
-        "Your working model, reproduced so it is fresh rather than recalled from a load many turns ago:\n"
-        f"----- ~/.claude/CLAUDE.md -----\n{claude_md}",
-        memory_section,
-    ]
-    usage = context_usage_line(transcript_path)
-    if usage:
-        sections.append(usage)
-    sections.append(
-        "Before your next tool call, write a short status to the chat, so this checkpoint lands in your "
-        "own output instead of being skimmed. Make it specific to right now, not a generic reassurance, "
-        "four lines:\n"
-        "- the one task you are actively working on;\n"
-        "- your last non-trivial decision and the specific principle above it followed or bent;\n"
-        "- your measured context figure above, and whether it means keep going or start a handoff;\n"
-        "- your next concrete step.\n"
-        "If writing that surfaces a drift from the working model or your memories, correct it before "
-        "continuing and say what you changed."
-    )
-    return "\n\n".join(sections)
 
 
 def main() -> int:
@@ -175,8 +117,8 @@ def main() -> int:
     session_id = payload.get("session_id", "unknown")
     clock = pathlib.Path(tempfile.gettempdir()) / f"claude-self-audit-{session_id}"
 
-    # First tool call of the session only starts the clock: CLAUDE.md is still fresh
-    # in context at that point, so injecting it again would be noise.
+    # First tool call of the session only starts the clock: the instructions are still fresh in context
+    # at session start, so re-grounding then is noise.
     if not clock.exists():
         clock.touch()
         return 0
@@ -186,21 +128,11 @@ def main() -> int:
             return 0
     except OSError:
         return 0
-
-    claude_md = pathlib.Path.home() / ".claude" / "CLAUDE.md"
-    if not claude_md.exists():
-        return 0
-    # Slow path (~once per interval): everything below runs only when a checkpoint
-    # is actually due, so the flock and transcript read never touch the hot path.
+    # Slow path (~once per interval): claim atomically so a parallel tool batch injects once, not per tool.
     if not claim_interval(clock):
         return 0
 
-    print(json.dumps({
-        "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
-            "additionalContext": build_injection(payload.get("transcript_path"), claude_md.read_text()),
-        }
-    }))
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": build_injection(payload.get("transcript_path"))}}))
     return 0
 
 
