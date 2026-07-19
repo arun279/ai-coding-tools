@@ -12,6 +12,7 @@
   - Extra comments that a competent senior engineer wouldn't add or is inconsistent with the rest of the codebase.
   - Extra defensive checks, try/catch blocks, or other simlar patterns that are abnormal for that area of the codebase (especially if called by trusted/validated codepaths).
   - Casting to get around type issues, variables that are only used a single time right after declaration or returned immediately (prefer inlining), inconsistent style/formatting, or other similar anti-patterns.
+  - When writing copy, avoid ai-coded patterns like emdashes.
 - Always follow best practices, modern standards, avoid any known anti-patterns. Use good code organization, code hygiene, and use the right abstractions/patterns. Do not overbloat the codebase. Always remember that the instinct to delete code is slighyly more important than the instinct to add code. Any code you produce should hold up to rigorous code review. Use functional, declarative, async, reactive programming patterns correctly and effectively wherever applicable.
 - Generally try to strive for concise, simply solutions. If a problem can be solved in a simpler way, propose it.
 - Follow DRY, SOLID, KISS, YAGNI, Five Whys and other similar practices, techniques, principles, etc., wherever applicable. You don't have to follow all of them all the time, but use them as useful mental models and patterns to lean on while dealing with problems and use them wherever applicable.
@@ -19,6 +20,8 @@
 - Keep a work log of every notable you do in `~/.claude/projects/{your-project-folder}` (or any other temporary space that the user might have specified) so you can keep track of everything being done, stays durable across compactions, and another session can pick up where you left off.
 - Whenever you encounter issues, you should think about if there are *deterministic* checks we can add to fully catch that entire category of issues and add them to hooks or actions or some other step where it gates progress until it's resolved. We should lean on well-established patterns, standards, libraries, etc. We should not invent new standards unless we absolutely have to.
 - If you need a paragraph-long or more comment to justify why some workaround ok, the code is likely wrong and you will need to rethink and fix it.
+- When testing something, besides the usual unit tests, e2e tests, etc., the thing you're building should be actually operated similar to the way a real user would operate (not headless) it so you can find real bugs that can only be surfaced by a real user interacting with the application.
+- Any claim or assertion made in the code or in the session while developing it should be rigorous fact-checking and should hold up to scrutiny.
 
 ## General workflow principles
 
@@ -32,6 +35,7 @@
 - I like the idea of competing interests, different subagents argue for different aspects (ux/usability/ui, security, code quality, etc.) where each fights for its own thing and one larger model acts as orchestrator and tie breaker, balances priorities, and eventually leads to a better place.
 - Refrain from loop theater where you ask loaded questions that just lead to models parroting each other's ideas and call it independent confirmation. For example: if you write 2+2=5 as an orchestrator and ask a validator to verify that you wrote "2+2=5" then it will say yes. This is not independent confirmation that 2+2=5 because you've effectively asked the validator to agree with you. The wrong thing is being reviewed. Each thing should do the *right* job with the *right* parameters.
 - You should always strive to think not only about known unknowns but unknown unknowns. If you overspecify workflows, you will completely miss unknown unknowns.
+- There should be a crunch at the end to polish things up to a launch-ready state. For example: think of how video games are built: there might be a vertical slice, but different parts of the game are all build out often simultaneously (gameplay mechanics, engine, story content, quests, textures, etc.) simultaneously. Even a few months before going gold, even though everything is in place and it might build and pass all the internal tests, the game will effectively be unplayable and/or unrecognizable by real players. There will be a crunch that happens where intense playtesting is done to surface all kinds of issues and everyone swarms on the game until you get to a clean, polished, bug-free experience.
 
 ## Picking the right models for the workflows and subagents
 
