@@ -22,12 +22,13 @@ import tempfile
 import time
 
 INTERVAL_SECONDS = int(os.environ.get("SELF_AUDIT_INTERVAL_SECONDS", 1800))
+START_DELAY_SECONDS = int(os.environ.get("SELF_AUDIT_START_DELAY_SECONDS", 0))
 
 # The injected checkpoint. Plain WYSIWYG template: each paragraph is one line, real newlines are real
 # newlines in the output, and {minutes}/{targets}/{context} are filled in by build_injection. Edit freely.
 INJECTION = """Automated re-grounding checkpoint: a periodic timer (about every {minutes} minutes) fired this between your tool calls, so it is not a message from the user. On a long run your standing instructions scroll out of attention and drift sets in unnoticed. Do not skim this.
 
-First, before your next tool call, RE-READ these in full now. They are your operating instructions and the current source of truth; do not trust your memory of them, and this checkpoint's questions assume you have just re-read them:
+First, before your next tool call, re-read these in full now. Don't ignore it to save context, this is vital to the health of the session. They are your operating instructions and the current source of truth; do not trust your memory of them, and this checkpoint's questions assume you have just re-read them:
 {targets}{context}
 
 Then write a short status to the chat, so this checkpoint lands in your own output instead of being skimmed. Make it specific to right now, not a generic reassurance, four lines:
@@ -117,11 +118,14 @@ def main() -> int:
     session_id = payload.get("session_id", "unknown")
     clock = pathlib.Path(tempfile.gettempdir()) / f"claude-self-audit-{session_id}"
 
-    # First tool call of the session only starts the clock: the instructions are still fresh in context
-    # at session start, so re-grounding then is noise.
+    # First tool call of the session: fire an initial checkpoint at the start rather than a full interval
+    # in, since the worst drift happens in the opening minutes. Backdate the clock so the first fire lands
+    # SELF_AUDIT_START_DELAY_SECONDS after start (default 0 = this call), then the normal interval after.
+    # Do not return, so a 0 start delay injects on this same call.
     if not clock.exists():
         clock.touch()
-        return 0
+        first = time.time() - max(0, INTERVAL_SECONDS - START_DELAY_SECONDS)
+        os.utime(clock, (first, first))
     # Hot path, taken on almost every tool call: a single stat, then bail until due.
     try:
         if time.time() - clock.stat().st_mtime < INTERVAL_SECONDS:

@@ -22,6 +22,15 @@
             "command": "python3 ~/.claude/hooks/gate-askuserquestion.py"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 ~/.claude/hooks/gate-mainloop-product-edits.py"
+          }
+        ]
       }
     ],
     "PostToolUse": [
